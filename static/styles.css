@@ -1,0 +1,160 @@
+body {
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(135deg, #fdfbfb, #ebedee);
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+}
+
+.main-layout {
+  width: 100%;
+  max-width: 720px;
+  margin: 40px auto;
+  padding: 20px;
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 30px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.07);
+  margin-bottom: 25px;
+  transition: 0.3s;
+}
+
+.card:hover {
+  box-shadow: 0 12px 25px rgba(0,0,0,0.1);
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #2d3436;
+  margin-bottom: 10px;
+}
+
+.subtitle {
+  font-size: 16px;
+  color: #636e72;
+  margin-bottom: 25px;
+}
+
+.file-label,
+label {
+  font-weight: 600;
+  color: #0984e3;
+  display: block;
+  margin-bottom: 6px;
+}
+
+/* 🎯 INPUTS más pequeños y compactos */
+input[type="file"],
+input[type="text"],
+input[type="number"],
+select {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  width: 100%;
+  margin-bottom: 14px;
+  font-size: 14px;
+  background: #f5f6fa;
+  box-sizing: border-box;
+  transition: border-color 0.3s, background 0.3s;
+}
+
+input[type="file"] {
+  border-style: dashed;
+  background: #ecf0f1;
+  color: #444;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 10px;
+}
+
+input[type="file"]:hover {
+  background: #dfe6e9;
+}
+
+input:focus,
+select:focus {
+  border-color: #0984e3;
+  outline: none;
+  background: #ffffff;
+}
+
+.btn-group {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.btn {
+  padding: 12px 24px;
+  font-size: 14px;
+  background-color: #0984e3;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: 0.3s ease;
+}
+
+.btn:hover {
+  background-color: #0652dd;
+  transform: scale(1.05);
+}
+
+#clear-btn {
+  background-color: #d63031;
+}
+
+#clear-btn:hover {
+  background-color: #b71c1c;
+}
+
+.preview-card img {
+  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  margin-top: 12px;
+}
+
+.result-card {
+  display: none;
+  font-size: 16px;
+  font-weight: bold;
+  color: #2d3436;
+  border-left: 5px solid #00b894;
+  background: #e0f7fa;
+}
+
+.result-card.visible {
+  display: block;
+  padding: 16px;
+  border-radius: 12px;
+  margin-top: 20px;
+}
+
+footer {
+  text-align: center;
+  margin-top: 40px;
+  color: #636e72;
+  font-size: 14px;
+}
+
+/* Form layout */
+.form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+}
