@@ -2,13 +2,13 @@ pip>=24.1
 setuptools>=68.0
 wheel>=0.41
 
-# versiones para cargar h5 legacy
+# versiones compatibles para cargar .h5 antiguos
 tensorflow-cpu==2.15.0.post1
 keras==2.15.0
 h5py==3.8.0
 
 Flask==3.0.3
-numpy==1.23.5
+numpy==1.26.4
 Pillow==10.3.0
 gdown==5.1.0
 gunicorn==21.2.0

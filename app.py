@@ -66,7 +66,7 @@ app = Flask(__name__)
 
 # Garantiza el modelo local y cárgalo
 ensure_model()
-model = load_model(MODEL_PATH)
+model = load_model(MODEL_PATH, compile=False)
 
 
 @app.route('/')
