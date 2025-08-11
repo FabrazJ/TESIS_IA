@@ -1,7 +1,3 @@
-import os
-# ↓ Oculta logs ruidosos de TF y usa cargador legacy para .h5 antiguos
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
-os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
 
 from flask import Flask, request, jsonify, render_template
 from PIL import Image
@@ -9,6 +5,18 @@ import numpy as np
 import csv
 from datetime import datetime
 from tensorflow import keras  # <- más robusto que from tensorflow.keras.models import ...
+
+import os
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
+
+try:
+    from tf_keras.models import load_model
+except ImportError:
+    # fallback por si en local usas TF 2.15
+    from tensorflow.keras.models import load_model
+
+
 
 # ================== Config ==================
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
@@ -57,7 +65,7 @@ app = Flask(__name__)
 
 # Garantiza el modelo local y cárgalo (compile=False para no requerir optimizadores)
 ensure_model()
-model = keras.models.load_model(MODEL_PATH, compile=False)
+model = load_model(MODEL_PATH, compile=False)
 
 @app.route('/')
 def index():

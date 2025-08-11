@@ -1,11 +1,12 @@
-tensorflow-cpu==2.15.0.post1
-keras==2.15.0
-h5py==3.8.0
+pip>=24.1
+setuptools>=68.0
+wheel>=0.41
+
+tensorflow-cpu==2.19.0
+tf_keras==2.19.0       # <— imprescindible si usas TF_USE_LEGACY_KERAS=1
+h5py==3.14.0
 numpy==1.26.4
 Pillow==10.3.0
 Flask==3.0.3
 gdown==5.1.0
 gunicorn==21.2.0
-pip>=24.1
-setuptools>=68.0
-wheel>=0.41
