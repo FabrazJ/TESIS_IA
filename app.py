@@ -6,20 +6,23 @@ import os
 import csv
 from datetime import datetime
 
-# ========= Config =========
+# ================== Config ==================
 MODEL_DIR = "Model"
-MODEL_NAME = "modelo_multitarea_final.h5"  # usa este nombre en Drive
+MODEL_NAME = "modelo_multitarea_final.h5"  # debe coincidir con el archivo en Drive
 MODEL_PATH = os.path.join(MODEL_DIR, MODEL_NAME)
-# ID de tu archivo en Google Drive (cámbialo por el tuyo)
+
+# Usa variable de entorno si la seteas en el hosting; si no, usa este ID por defecto
 FILE_ID = os.getenv("DRIVE_FILE_ID", "1i8P8mkABFERZ-hBgz1Scpx_MjNxbAAwQ")
+
 CSV_PATH = "registros_pacientes.csv"
 
 clases_diagnostico = ['No Alzheimer', 'Alzheimer leve', 'Alzheimer moderado', 'Alzheimer severo']
 clases_lobulo = ['Frontal', 'Temporal', 'Parietal', 'Occipital']
 
-# ========= Utilidades =========
+
+# ================== Helpers ==================
 def ensure_pkg(pkg: str):
-    """Instala un paquete si no está disponible (útil para gdown en despliegues simples)."""
+    """Instala un paquete si no está disponible (p.ej. gdown en despliegues)."""
     try:
         __import__(pkg)
     except ImportError:
@@ -27,7 +30,7 @@ def ensure_pkg(pkg: str):
         subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
 
 def ensure_model():
-    """Descarga el modelo desde Google Drive si no existe localmente."""
+    """Descarga el .h5 desde Google Drive si no existe localmente."""
     if os.path.exists(MODEL_PATH):
         return
     os.makedirs(MODEL_DIR, exist_ok=True)
@@ -37,7 +40,7 @@ def ensure_model():
     print("⏬ Descargando modelo desde Google Drive...")
     gdown.download(url, MODEL_PATH, quiet=False)
     if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError("No se pudo descargar el modelo .h5 desde Google Drive.")
+        raise FileNotFoundError("No se pudo descargar el modelo desde Google Drive.")
 
 def preparar_imagen(archivo):
     try:
@@ -49,27 +52,22 @@ def preparar_imagen(archivo):
     except Exception as e:
         raise ValueError(f"Error al procesar la imagen: {e}")
 
-def header_csv():
-    return ['Fecha', 'Nombre', 'Cédula', 'Edad', 'Sexo', 'Diagnóstico', 'Lóbulo afectado', 'Nivel de daño']
-
-def guardar_en_csv(data_row):
+def guardar_en_csv(data):
     file_exists = os.path.isfile(CSV_PATH)
     with open(CSV_PATH, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         if not file_exists or os.path.getsize(CSV_PATH) == 0:
-            writer.writerow(header_csv())
-        writer.writerow(data_row)
+            writer.writerow(['Fecha', 'Nombre', 'Cédula', 'Edad', 'Sexo', 'Diagnóstico', 'Lóbulo afectado', 'Nivel de daño'])
+        writer.writerow(data)
 
-# ========= App =========
+
+# ================== App ==================
 app = Flask(__name__)
 
-# Garantiza modelo antes de cargarlo
+# Garantiza el modelo local y cárgalo
 ensure_model()
 model = load_model(MODEL_PATH)
 
-@app.route('/health')
-def health():
-    return jsonify({"status": "ok", "model_loaded": os.path.exists(MODEL_PATH)})
 
 @app.route('/')
 def index():
@@ -81,29 +79,20 @@ def predict():
     if archivo is None or archivo.filename == '':
         return jsonify({'error': 'No se encontró archivo'}), 400
 
-    nombre = request.form.get('nombre', '')
-    cedula = request.form.get('cedula', '')
-    edad = request.form.get('edad', '')
-    sexo = request.form.get('sexo', '')
+    nombre = request.form.get('nombre')
+    cedula = request.form.get('cedula')
+    edad = request.form.get('edad')
+    sexo = request.form.get('sexo')
 
     try:
         img_array = preparar_imagen(archivo)
 
-        # Espera un modelo multitarea con 3 salidas (diagnóstico, lóbulo, score)
-        salidas = model.predict(img_array)
-        if not isinstance(salidas, (list, tuple)) or len(salidas) < 3:
-            return jsonify({'error': 'El modelo no retornó las 3 salidas esperadas.'}), 500
-
-        pred_diagnosis, pred_lobe, pred_score = salidas[0], salidas[1], salidas[2]
+        # Espera 3 salidas: diagnóstico, lóbulo y score
+        pred_diagnosis, pred_lobe, pred_score = model.predict(img_array)
 
         clase_diagnostico = clases_diagnostico[int(np.argmax(pred_diagnosis[0]))]
         clase_lobulo = clases_lobulo[int(np.argmax(pred_lobe[0]))]
-
-        # Si tu tercera salida es un escalar, toma el primero. Ajusta si tu modelo devuelve otro rango.
-        try:
-            nivel_danio = round(float(np.ravel(pred_score)[0]), 2)
-        except Exception:
-            nivel_danio = None
+        nivel_danio = round(float(np.ravel(pred_score)[0]), 2)
 
         guardar_en_csv([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -142,19 +131,16 @@ def actualizar_registro():
     if not data or 'Cédula' not in data:
         return jsonify({'error': 'Datos inválidos'}), 400
 
-    if not os.path.isfile(CSV_PATH) or os.path.getsize(CSV_PATH) == 0:
-        return jsonify({'error': 'No hay registros para actualizar'}), 404
-
     cedula_objetivo = data['Cédula']
     actualizado = False
     registros = []
 
     with open(CSV_PATH, mode='r', encoding='utf-8') as file:
         reader = csv.DictReader(file)
-        campos = reader.fieldnames or header_csv()
+        campos = reader.fieldnames or ['Fecha','Nombre','Cédula','Edad','Sexo','Diagnóstico','Lóbulo afectado','Nivel de daño']
         for fila in reader:
-            if fila.get('Cédula', '') == cedula_objetivo:
-                fila.update({k: str(v) for k, v in data.items()})
+            if fila.get('Cédula') == cedula_objetivo:
+                fila.update(data)
                 actualizado = True
             registros.append(fila)
 
@@ -173,17 +159,13 @@ def eliminar_registro():
     if not data or 'cedula' not in data:
         return jsonify({'error': 'Datos inválidos'}), 400
 
-    if not os.path.isfile(CSV_PATH) or os.path.getsize(CSV_PATH) == 0:
-        return jsonify({'error': 'No hay registros para eliminar'}), 404
-
     cedula_objetivo = str(data['cedula'])
     registros = []
     eliminado = False
-    campos = header_csv()
 
     with open(CSV_PATH, mode='r', encoding='utf-8') as file:
         reader = csv.DictReader(file)
-        campos = reader.fieldnames or header_csv()
+        campos = reader.fieldnames or ['Fecha','Nombre','Cédula','Edad','Sexo','Diagnóstico','Lóbulo afectado','Nivel de daño']
         for fila in reader:
             if str(fila.get('Cédula', '')) != cedula_objetivo:
                 registros.append(fila)
@@ -201,5 +183,6 @@ def eliminar_registro():
 
 
 if __name__ == '__main__':
-    # Para exponer en red local (ej. emuladores/dispositivos)
-    app.run(host="0.0.0.0", port=5000, debug=True)
+  # modificar la ip - no olvidar
+       app.run(debug=True)
+
