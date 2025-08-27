@@ -33,7 +33,6 @@ def ensure_model():
         raise FileNotFoundError("No se pudo descargar el modelo desde Google Drive.")
 
 def cargar_modelo():
-    """Carga el modelo .keras directamente."""
     return keras.models.load_model(MODEL_PATH, compile=False)
 
 def preparar_imagen(archivo):
