@@ -32,8 +32,14 @@ def ensure_model():
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError("No se pudo descargar el modelo desde Google Drive.")
 
-def cargar_modelo():
-    return keras.models.load_model(MODEL_PATH, compile=False)
+# Modelo cargado bajo demanda
+model = None
+def get_model():
+    global model
+    if model is None:
+        ensure_model()
+        model = keras.models.load_model(MODEL_PATH, compile=False)
+    return model
 
 def preparar_imagen(archivo):
     try:
@@ -55,10 +61,6 @@ def guardar_en_csv(data):
 # ================== App ==================
 app = Flask(__name__)
 
-# Garantiza el modelo local y cárgalo
-ensure_model()
-model = cargar_modelo()
-
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -76,9 +78,9 @@ def predict():
 
     try:
         img_array = preparar_imagen(archivo)
-
-        # Espera 3 salidas: diagnóstico, lóbulo y score
+        model = get_model()  # carga segura bajo demanda
         salidas = model.predict(img_array)
+
         if not isinstance(salidas, (list, tuple)) or len(salidas) < 3:
             return jsonify({'error': 'El modelo no retornó las 3 salidas esperadas.'}), 500
 
@@ -114,6 +116,7 @@ def obtener_registros():
     except Exception as e:
         return jsonify({'error': f'Error al leer los registros: {str(e)}'}), 500
 
+# ================== Actualizar y eliminar registros ==================
 @app.route('/actualizar-registro', methods=['POST'])
 def actualizar_registro():
     data = request.get_json()
@@ -175,7 +178,7 @@ def eliminar_registro():
     else:
         return jsonify({'error': 'Cédula no encontrada'}), 404
 
-
+# ================== Main ==================
 if __name__ == '__main__':
     import os as _os
     app.run(host="0.0.0.0", port=int(_os.getenv("PORT", 5000)), debug=True)
