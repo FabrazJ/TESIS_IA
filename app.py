@@ -67,18 +67,36 @@ def predict():
     if not archivo or archivo.filename == '':
         return jsonify({'error': 'No se encontró archivo'}), 400
 
-    nombre = request.form.get('nombre')
-    cedula = request.form.get('cedula')
-    edad   = request.form.get('edad')
-    sexo   = request.form.get('sexo')
+    nombre = request.form.get('nombre', '').strip()
+    cedula = request.form.get('cedula', '').strip()
+    edad   = request.form.get('edad', '').strip()
+    sexo   = request.form.get('sexo', '').strip()
+
+    # Validaciones básicas
+    if not nombre or not cedula or not edad or not sexo:
+        return jsonify({'error': 'Todos los campos son obligatorios'}), 400
+    if not cedula.isdigit():
+        return jsonify({'error': 'La cédula debe contener solo números'}), 400
+    try:
+        edad = int(edad)
+        if edad < 0 or edad > 120:
+            return jsonify({'error': 'Edad inválida'}), 400
+    except:
+        return jsonify({'error': 'Edad inválida'}), 400
 
     try:
         img_array = preparar_imagen(archivo)
+    except Exception as e:
+        return jsonify({'error': f'Error al procesar la imagen: {str(e)}'}), 400
+
+    try:
         model_obj = get_model()
         salidas = model_obj.predict(img_array)
 
+        # Si devuelve un solo array, lo convertimos en lista
         if not isinstance(salidas, (list, tuple)):
             salidas = [salidas]
+
         if len(salidas) < 3:
             return jsonify({'error': 'El modelo no retornó las 3 salidas esperadas.'}), 500
 
@@ -91,12 +109,14 @@ def predict():
                         nombre, cedula, edad, sexo,
                         clase_diagnostico, clase_lobulo, nivel_danio])
 
-        return jsonify({'diagnostico': clase_diagnostico,
-                        'lobulo_afectado': clase_lobulo,
-                        'nivel_danio': nivel_danio})
+        return jsonify({
+            'diagnostico': clase_diagnostico,
+            'lobulo_afectado': clase_lobulo,
+            'nivel_danio': nivel_danio
+        })
 
     except Exception as e:
-        return jsonify({'error': f'Error en la predicción: {str(e)}'}), 500
+        return jsonify({'error': f'Error en la predicción o modelo: {str(e)}'}), 500
 
 @app.route('/registros', methods=['GET'])
 def obtener_registros():

@@ -52,45 +52,46 @@
   </style>
 </head>
 <body>
-  <div class="main-layout">
-    <div class="card">
-      <h1 class="title">Detección de Alzheimer</h1>
-      <p class="subtitle">Llena los datos del paciente, sube una imagen MRI y obtén una predicción.</p>
+    <div class="main-layout">
+      <div class="card">
+        <h1 class="title">Detección de Alzheimer</h1>
+        <p class="subtitle">Llena los datos del paciente, sube una imagen MRI y obtén una predicción.</p>
 
-      <!-- Form corregido: se agregó method y enctype -->
-      <form id="upload-form" class="form-card" action="/predict" method="post" enctype="multipart/form-data">
-        <label for="nombre" class="file-label">Nombre del paciente:</label>
-        <input type="text" id="nombre" name="nombre" required pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+" title="Solo letras y espacios" />
+        <!-- Formulario corregido -->
+        <form id="upload-form" class="form-card" action="/predict" method="post" enctype="multipart/form-data">
+          <label for="nombre" class="file-label">Nombre del paciente:</label>
+          <input type="text" id="nombre" name="nombre" required pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+" title="Solo letras y espacios" />
 
-        <label for="cedula" class="file-label">Cédula/ID:</label>
-        <input type="text" id="cedula" name="cedula" required pattern="\d+" title="Solo números" />
+          <label for="cedula" class="file-label">Cédula/ID:</label>
+          <input type="text" id="cedula" name="cedula" required pattern="\d+" title="Solo números" />
 
-        <label for="edad" class="file-label">Edad:</label>
-        <input type="number" id="edad" name="edad" required min="0" max="120" />
+          <label for="edad" class="file-label">Edad:</label>
+          <input type="number" id="edad" name="edad" required min="0" max="120" />
 
-        <label for="sexo" class="file-label">Sexo:</label>
-        <select id="sexo" name="sexo" required>
-          <option value="">Selecciona</option>
-          <option value="Femenino">Femenino</option>
-          <option value="Masculino">Masculino</option>
-          <option value="Otro">Otro</option>
-        </select>
+          <label for="sexo" class="file-label">Sexo:</label>
+          <select id="sexo" name="sexo" required>
+            <option value="">Selecciona</option>
+            <option value="Femenino">Femenino</option>
+            <option value="Masculino">Masculino</option>
+            <option value="Otro">Otro</option>
+          </select>
 
-        <label for="image" class="file-label">Sube imagen MRI:</label>
-        <input type="file" id="image" name="file" accept="image/*" required />
+          <label for="image" class="file-label">Sube imagen MRI:</label>
+          <input type="file" id="image" name="file" accept="image/*" required />
 
-        <div class="btn-group">
-          <button type="submit" class="btn">Predecir</button>
-          <button type="button" id="clear-btn" class="btn">Limpiar</button>
-          <button type="button" id="ver-registros-btn" class="btn">Ver registros</button>
+          <div class="btn-group">
+            <button type="submit" class="btn">Predecir</button>
+            <button type="button" id="clear-btn" class="btn">Limpiar</button>
+            <button type="button" id="ver-registros-btn" class="btn">Ver registros</button>
+          </div>
+        </form>
+
+        <div id="preview-container" class="card preview-card">
+          <img id="preview" src="#" alt="Vista previa" style="display: none;" />
         </div>
-      </form>
 
-      <div id="preview-container" class="card preview-card">
-        <img id="preview" src="#" alt="Vista previa" style="display: none;" />
+        <div id="result" class="card result-card"></div>
       </div>
-
-      <div id="result" class="card result-card"></div>
     </div>
 
     <footer>
@@ -120,54 +121,67 @@
   const verRegistrosBtn = document.getElementById('ver-registros-btn');
 
   form.addEventListener('submit', async (e) => {
-    const nombre = document.getElementById('nombre').value.trim();
-    const cedula = document.getElementById('cedula').value.trim();
-    const soloLetras = /^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/;
-    const soloNumeros = /^\d+$/;
+      e.preventDefault(); // evita el envío tradicional del formulario
 
-    if (!soloLetras.test(nombre)) {
-      alert('El nombre solo debe contener letras y espacios.');
-      e.preventDefault(); return;
-    }
-    if (!soloNumeros.test(cedula)) {
-      alert('La cédula debe contener solo números.');
-      e.preventDefault(); return;
-    }
+      const nombre = document.getElementById('nombre').value.trim();
+      const cedula = document.getElementById('cedula').value.trim();
+      const soloLetras = /^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/;
+      const soloNumeros = /^\d+$/;
 
-    e.preventDefault();
-    const file = imageInput.files[0];
-    if (!file) {
-      alert('Debes seleccionar una imagen.');
-      return;
-    }
-
-    const formData = new FormData(form);
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      previewImg.src = reader.result;
-      previewImg.style.display = 'block';
-    };
-    reader.readAsDataURL(file);
-
-    try {
-      const response = await fetch('/predict', { method: 'POST', body: formData });
-      const data = await response.json();
-      if (data.diagnostico && data.lobulo_afectado && data.nivel_danio !== undefined) {
-        resultDiv.innerHTML = `
-          <p><strong>Diagnóstico:</strong> ${data.diagnostico}</p>
-          <p><strong>Lóbulo afectado:</strong> ${data.lobulo_afectado}</p>
-          <p><strong>Nivel de daño:</strong> ${data.nivel_danio}</p>`;
-      } else if (data.error) {
-        resultDiv.innerText = `Error: ${data.error}`;
-      } else {
-        resultDiv.innerText = 'Error desconocido.';
+      // Validaciones
+      if (!soloLetras.test(nombre)) {
+          alert('El nombre solo debe contener letras y espacios.');
+          return;
       }
-      resultDiv.classList.add('visible');
-    } catch {
-      resultDiv.innerText = 'Error en la conexión con el servidor.';
-    }
+      if (!soloNumeros.test(cedula)) {
+          alert('La cédula debe contener solo números.');
+          return;
+      }
+
+      const file = imageInput.files[0];
+      if (!file) {
+          alert('Debes seleccionar una imagen.');
+          return;
+      }
+
+      // Mostrar preview de imagen
+      const reader = new FileReader();
+      reader.onload = () => {
+          previewImg.src = reader.result;
+          previewImg.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+
+      // Enviar formulario al backend
+      const formData = new FormData(form);
+      try {
+          const response = await fetch('/predict', {
+              method: 'POST',
+              body: formData
+          });
+
+          const data = await response.json();
+
+          if (data.diagnostico && data.lobulo_afectado && data.nivel_danio !== undefined) {
+              resultDiv.innerHTML = `
+                  <p><strong>Diagnóstico:</strong> ${data.diagnostico}</p>
+                  <p><strong>Lóbulo afectado:</strong> ${data.lobulo_afectado}</p>
+                  <p><strong>Nivel de daño:</strong> ${data.nivel_danio}</p>
+              `;
+          } else if (data.error) {
+              resultDiv.innerText = `Error: ${data.error}`;
+          } else {
+              resultDiv.innerText = 'Error desconocido.';
+          }
+
+          resultDiv.classList.add('visible');
+
+      } catch (err) {
+          console.error(err);
+          resultDiv.innerText = 'Error en la conexión con el servidor.';
+      }
   });
+
 
   clearBtn.addEventListener('click', () => {
     form.reset();
