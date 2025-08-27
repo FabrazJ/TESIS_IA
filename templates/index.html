@@ -57,7 +57,8 @@
       <h1 class="title">Detección de Alzheimer</h1>
       <p class="subtitle">Llena los datos del paciente, sube una imagen MRI y obtén una predicción.</p>
 
-      <form id="upload-form" class="form-card">
+      <!-- Form corregido: se agregó method y enctype -->
+      <form id="upload-form" class="form-card" action="/predict" method="post" enctype="multipart/form-data">
         <label for="nombre" class="file-label">Nombre del paciente:</label>
         <input type="text" id="nombre" name="nombre" required pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+" title="Solo letras y espacios" />
 
