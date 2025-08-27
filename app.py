@@ -5,12 +5,13 @@ from flask import Flask, request, jsonify, render_template
 from PIL import Image
 import numpy as np, csv
 from datetime import datetime
-from tensorflow import keras  # usar esta vía
+from tensorflow import keras
+from tensorflow.keras.layers import InputLayer  # para compatibilidad con .h5
 
 # ================== Config ==================
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR  = os.path.join(BASE_DIR, "Model")
-MODEL_NAME = "modelo_multitarea_final.h5"      # debe coincidir con el archivo en Drive
+MODEL_NAME = "modelo_multitarea_final.h5"      # puede ser .h5 o .keras
 MODEL_PATH = os.path.join(MODEL_DIR, MODEL_NAME)
 
 FILE_ID = os.getenv("DRIVE_FILE_ID", "1i8P8mkABFERZ-hBgz1Scpx_MjNxbAAwQ")
@@ -21,7 +22,7 @@ clases_lobulo = ['Frontal', 'Temporal', 'Parietal', 'Occipital']
 
 # ================== Helpers ==================
 def ensure_model():
-    """Descarga el .h5 desde Google Drive si no existe localmente."""
+    """Descarga el modelo desde Google Drive si no existe localmente."""
     if os.path.exists(MODEL_PATH):
         return
     os.makedirs(MODEL_DIR, exist_ok=True)
@@ -31,6 +32,19 @@ def ensure_model():
     gdown.download(url, MODEL_PATH, quiet=False)
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError("No se pudo descargar el modelo desde Google Drive.")
+
+def cargar_modelo():
+    """Carga el modelo de forma robusta, compatible con InputLayer."""
+    try:
+        return keras.models.load_model(MODEL_PATH, compile=False)
+    except TypeError as e:
+        if "InputLayer" in str(e):
+            return keras.models.load_model(
+                MODEL_PATH,
+                compile=False,
+                custom_objects={"InputLayer": InputLayer}
+            )
+        raise e
 
 def preparar_imagen(archivo):
     try:
@@ -52,9 +66,9 @@ def guardar_en_csv(data):
 # ================== App ==================
 app = Flask(__name__)
 
-# Garantiza el modelo local y cárgalo (compile=False para no requerir optimizadores)
+# Garantiza el modelo local y cárgalo
 ensure_model()
-model = keras.models.load_model(MODEL_PATH, compile=False)
+model = cargar_modelo()
 
 @app.route('/')
 def index():
