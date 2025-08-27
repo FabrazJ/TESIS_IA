@@ -6,12 +6,12 @@ from PIL import Image
 import numpy as np, csv
 from datetime import datetime
 from tensorflow import keras
-from tensorflow.keras.layers import InputLayer  # para compatibilidad con .h5
+from tensorflow.keras.layers import InputLayer
 
 # ================== Config ==================
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR  = os.path.join(BASE_DIR, "Model")
-MODEL_NAME = "modelo_multitarea_final.h5"      # puede ser .h5 o .keras
+MODEL_NAME = "modelo_multitarea_final.h5"      # Puede ser .h5 o .keras
 MODEL_PATH = os.path.join(MODEL_DIR, MODEL_NAME)
 
 FILE_ID = os.getenv("DRIVE_FILE_ID", "1i8P8mkABFERZ-hBgz1Scpx_MjNxbAAwQ")
@@ -26,7 +26,7 @@ def ensure_model():
     if os.path.exists(MODEL_PATH):
         return
     os.makedirs(MODEL_DIR, exist_ok=True)
-    import gdown  # gdown debe estar en requirements.txt
+    import gdown
     url = f"https://drive.google.com/uc?id={FILE_ID}"
     print("⏬ Descargando modelo desde Google Drive...")
     gdown.download(url, MODEL_PATH, quiet=False)
@@ -34,16 +34,18 @@ def ensure_model():
         raise FileNotFoundError("No se pudo descargar el modelo desde Google Drive.")
 
 def cargar_modelo():
-    """Carga el modelo de forma robusta, compatible con InputLayer."""
+    """Carga el modelo de forma robusta, convirtiendo a .keras si es necesario."""
     try:
         return keras.models.load_model(MODEL_PATH, compile=False)
     except TypeError as e:
         if "InputLayer" in str(e):
-            return keras.models.load_model(
-                MODEL_PATH,
-                compile=False,
-                custom_objects={"InputLayer": InputLayer}
-            )
+            print("⚠️ Error InputLayer detectado. Convirtiendo modelo a formato .keras en memoria...")
+            # Cargar modelo antiguo con custom_objects
+            model = keras.models.load_model(MODEL_PATH, compile=False, custom_objects={"InputLayer": InputLayer})
+            # Guardar temporalmente en formato .keras y cargarlo de nuevo
+            tmp_path = os.path.join(MODEL_DIR, "tmp_model.keras")
+            model.save(tmp_path, save_format="keras")
+            return keras.models.load_model(tmp_path, compile=False)
         raise e
 
 def preparar_imagen(archivo):
@@ -188,6 +190,5 @@ def eliminar_registro():
 
 
 if __name__ == '__main__':
-    # Para local: Render ignora esto porque usa gunicorn
     import os as _os
     app.run(host="0.0.0.0", port=int(_os.getenv("PORT", 5000)), debug=True)
