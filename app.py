@@ -10,7 +10,7 @@ from tensorflow import keras
 # ================== Config ==================
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR  = os.path.join(BASE_DIR, "Model")
-MODEL_NAME = "modelo_multitarea_final.keras"
+MODEL_NAME = "modelo_multitarea_final (1).keras"
 MODEL_PATH = os.path.join(MODEL_DIR, MODEL_NAME)
 
 FILE_ID = os.getenv("DRIVE_FILE_ID", "1i8P8mkABFERZ-hBgz1Scpx_MjNxbAAwQ")
