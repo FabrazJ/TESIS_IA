@@ -21,7 +21,6 @@ clases_lobulo      = ['Frontal', 'Temporal', 'Parietal', 'Occipital']
 
 # ================== Helpers ==================
 def ensure_model():
-    """Verifica que el modelo exista localmente. No descarga nada."""
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(
             f"Modelo no encontrado en {MODEL_PATH}. "
@@ -51,6 +50,123 @@ def guardar_en_csv(data):
             writer.writerow(['Fecha','Nombre','Cédula','Edad','Sexo','Diagnóstico','Lóbulo afectado','Nivel de daño'])
         writer.writerow(data)
 
+# ---------- utilidades robustas ----------
+def _to_numpy_leaf(x):
+    """Convierte un 'leaf' (tensor, lista simple numérica, escalar) a np.ndarray numérico."""
+    # Tensores TF
+    if hasattr(x, "numpy"):
+        try:
+            x = x.numpy()
+        except Exception:
+            pass
+    arr = np.asarray(x)
+    if arr.dtype == object:
+        raise TypeError("dtype=object")
+    return arr.astype(np.float32, copy=False)
+
+def _flatten_numeric(obj, path="root"):
+    """
+    Aplana recursivamente cualquier estructura y devuelve
+    lista de (np.ndarray, path_str) SOLO para arrays numéricos.
+    """
+    out = []
+    # dict
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            out.extend(_flatten_numeric(v, f"{path}.{k}"))
+        return out
+    # list/tuple
+    if isinstance(obj, (list, tuple)):
+        for i, v in enumerate(obj):
+            out.extend(_flatten_numeric(v, f"{path}[{i}]"))
+        return out
+    # leaf
+    try:
+        arr = _to_numpy_leaf(obj)
+    except Exception:
+        return []
+    # normaliza a al menos 2D (batch x features)
+    if arr.ndim == 0:   # escalar
+        arr = arr.reshape(1, 1)
+    elif arr.ndim == 1: # vector
+        arr = arr[None, :]
+    return [(arr, path)]
+
+def _asegurar_batch(arr, fallback_shape):
+    """Siempre (1, n) float32; si arr es None o shape inesperada, usa fallback."""
+    if arr is None:
+        return np.zeros(fallback_shape, dtype=np.float32)
+    arr = np.asarray(arr, dtype=np.float32)
+    if arr.ndim == 0:
+        arr = arr.reshape(1, 1)
+    elif arr.ndim == 1:
+        arr = arr[None, :]
+    # Ajuste de columnas si no coincide
+    if arr.shape[-1] != fallback_shape[-1]:
+        out = np.zeros(fallback_shape, dtype=np.float32)
+        flat = arr.ravel()
+        n = min(out.shape[-1], flat.shape[0])
+        out[0, :n] = flat[:n]
+        return out
+    return arr
+
+def _seleccionar_salidas(salidas):
+    """
+    A partir de cualquier estructura, determina:
+      - pred_diagnosis: (1,4)
+      - pred_lobe:      (1,4)
+      - pred_score:     (1,1)
+    usando heurísticas seguras si faltan formas exactas.
+    """
+    hojas = _flatten_numeric(salidas)  # [(arr, path), ...]
+    if not hojas:
+        return None, None, None
+
+    # Candidatos por forma
+    cand_4 = [(a, p) for (a, p) in hojas if a.shape[-1] == 4]
+    cand_1 = [(a, p) for (a, p) in hojas if a.shape[-1] == 1]
+
+    pred_diagnosis = None
+    pred_lobe      = None
+    pred_score     = None
+
+    # Preferimos exactamente dos (1,4)
+    if len(cand_4) >= 2:
+        # Ordena por "confianza" heurística: mayor varianza en eje de clases
+        cand_4.sort(key=lambda t: float(np.var(t[0])), reverse=True)
+        pred_diagnosis = cand_4[0][0]
+        pred_lobe      = cand_4[1][0]
+    elif len(cand_4) == 1:
+        pred_diagnosis = cand_4[0][0]
+
+    # Para score preferimos (1,1)
+    if len(cand_1) >= 1:
+        pred_score = cand_1[0][0]
+
+    # Si aún falta alguno, usa heurística por “ancho” (más clases)
+    if pred_diagnosis is None or pred_lobe is None:
+        # Ordena por ancho de la última dimensión (desc) y varianza
+        resto = [(a, p) for (a, p) in hojas]
+        resto.sort(key=lambda t: (t[0].shape[-1], float(np.var(t[0]))), reverse=True)
+        # Toma los dos primeros como clasificaciones
+        if pred_diagnosis is None and len(resto) >= 1:
+            pred_diagnosis = resto[0][0]
+        if pred_lobe is None and len(resto) >= 2:
+            pred_lobe = resto[1][0]
+
+    # Si falta score, intenta algún (1,1); si no, cualquier escalar/lo más chico
+    if pred_score is None:
+        # busca el más pequeño en ancho
+        hojas_por_ancho = sorted(hojas, key=lambda t: t[0].shape[-1])
+        pred_score = hojas_por_ancho[0][0]
+
+    # Asegura shapes finales
+    pred_diagnosis = _asegurar_batch(pred_diagnosis, (1, len(clases_diagnostico)))
+    pred_lobe      = _asegurar_batch(pred_lobe,      (1, len(clases_lobulo)))
+    pred_score     = _asegurar_batch(pred_score,     (1, 1))
+
+    return pred_diagnosis, pred_lobe, pred_score
+
 # ================== App ==================
 app = Flask(__name__)
 
@@ -79,7 +195,7 @@ def predict():
         edad = int(edad)
         if edad < 0 or edad > 120:
             return jsonify({'error': 'Edad inválida'}), 400
-    except:
+    except Exception:
         return jsonify({'error': 'Edad inválida'}), 400
 
     # Procesar imagen
@@ -93,22 +209,15 @@ def predict():
         model_obj = get_model()
         salidas = model_obj.predict(img_array)
 
-        # Debug de salida
-        print("Salidas del modelo:", type(salidas), 
-              [s.shape if hasattr(s,'shape') else type(s) for s in salidas])
+        # Selección automática de salidas
+        pred_diagnosis, pred_lobe, pred_score = _seleccionar_salidas(salidas)
 
-        # Aseguramos que siempre sean 3 arrays
-        if not isinstance(salidas, (list, tuple)):
-            salidas = [salidas]
-
-        pred_diagnosis = salidas[0] if len(salidas) > 0 else np.zeros((1, len(clases_diagnostico)))
-        pred_lobe      = salidas[1] if len(salidas) > 1 else np.zeros((1, len(clases_lobulo)))
-        pred_score     = salidas[2] if len(salidas) > 2 else np.array([[0.0]])
-
+        # Decodificación
         clase_diagnostico = clases_diagnostico[int(np.argmax(pred_diagnosis[0]))]
         clase_lobulo      = clases_lobulo[int(np.argmax(pred_lobe[0]))]
         nivel_danio       = round(float(np.ravel(pred_score)[0]), 2)
 
+        # Guardar registro
         guardar_en_csv([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             nombre, cedula, edad, sexo,
@@ -122,7 +231,6 @@ def predict():
         })
 
     except Exception as e:
-        print("Error en predict():", str(e))
         return jsonify({'error': f'Error en la predicción o modelo: {str(e)}'}), 500
 
 # ================== Gestión de registros ==================
@@ -132,25 +240,26 @@ def obtener_registros():
         return jsonify([])
     with open(CSV_PATH, 'r', encoding='utf-8') as file:
         reader = csv.DictReader(file)
-        registros = [{k: (v or '') for k,v in row.items()} for row in reader]
+        registros = [{k: (v or '') for k, v in row.items()} for row in reader]
     return jsonify(registros)
 
 @app.route('/actualizar-registro', methods=['POST'])
 def actualizar_registro():
     data = request.get_json()
-    if not data or 'Cédula' not in data: return jsonify({'error': 'Datos inválidos'}), 400
+    if not data or 'Cédula' not in data:
+        return jsonify({'error': 'Datos inválidos'}), 400
     if not os.path.isfile(CSV_PATH) or os.path.getsize(CSV_PATH) == 0:
         return jsonify({'error': 'No hay registros para actualizar'}), 404
 
-    cedula_objetivo = data['Cédula']
+    cedula_objetivo = str(data['Cédula'])
     registros, actualizado = [], False
 
     with open(CSV_PATH, 'r', encoding='utf-8') as file:
         reader = csv.DictReader(file)
         campos = reader.fieldnames or ['Fecha','Nombre','Cédula','Edad','Sexo','Diagnóstico','Lóbulo afectado','Nivel de daño']
         for fila in reader:
-            if fila.get('Cédula') == cedula_objetivo:
-                fila.update({k: str(v) for k,v in data.items()})
+            if str(fila.get('Cédula', '')) == cedula_objetivo:
+                fila.update({k: str(v) for k, v in data.items()})
                 actualizado = True
             registros.append(fila)
 
@@ -165,7 +274,8 @@ def actualizar_registro():
 @app.route('/eliminar-registro', methods=['POST'])
 def eliminar_registro():
     data = request.get_json()
-    if not data or 'cedula' not in data: return jsonify({'error': 'Datos inválidos'}), 400
+    if not data or 'cedula' not in data:
+        return jsonify({'error': 'Datos inválidos'}), 400
     if not os.path.isfile(CSV_PATH) or os.path.getsize(CSV_PATH) == 0:
         return jsonify({'error': 'No hay registros para eliminar'}), 404
 
@@ -176,7 +286,7 @@ def eliminar_registro():
         reader = csv.DictReader(file)
         campos = reader.fieldnames or ['Fecha','Nombre','Cédula','Edad','Sexo','Diagnóstico','Lóbulo afectado','Nivel de daño']
         for fila in reader:
-            if str(fila.get('Cédula','')) != cedula_objetivo:
+            if str(fila.get('Cédula', '')) != cedula_objetivo:
                 registros.append(fila)
             else:
                 eliminado = True
