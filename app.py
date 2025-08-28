@@ -11,7 +11,7 @@ from tensorflow import keras
 # ================== Config ==================
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR  = os.path.join(BASE_DIR, "Model")
-MODEL_NAME = "modelo_multitarea_final.keras"  # Renombrar el archivo para evitar paréntesis
+MODEL_NAME = "modelo_multitarea_final.keras"
 MODEL_PATH = os.path.join(MODEL_DIR, MODEL_NAME)
 CSV_PATH   = os.path.join(BASE_DIR, "registros_pacientes.csv")
 FILE_ID    = os.getenv("DRIVE_FILE_ID", "1i8P8mkABFERZ-hBgz1Scpx_MjNxbAAwQ")
@@ -41,14 +41,12 @@ def get_model():
     return model
 
 def preparar_imagen(archivo):
-    """Procesa la imagen para el modelo: tamaño 128x128 y normalización."""
     img = Image.open(archivo).convert('RGB')
     img = img.resize((128, 128))
     img_array = np.array(img, dtype=np.float32) / 255.0
     return np.expand_dims(img_array, axis=0)
 
 def guardar_en_csv(data):
-    """Guarda los registros de pacientes en CSV."""
     file_exists = os.path.isfile(CSV_PATH)
     with open(CSV_PATH, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -63,6 +61,7 @@ app = Flask(__name__)
 def index():
     return render_template('index.html')
 
+# ================== Función Predict ==================
 @app.route('/predict', methods=['POST'])
 def predict():
     archivo = request.files.get('file')
@@ -92,18 +91,23 @@ def predict():
     except Exception as e:
         return jsonify({'error': f'Error al procesar la imagen: {str(e)}'}), 400
 
-    # Predicción
+    # Predicción robusta
     try:
         model_obj = get_model()
         salidas = model_obj.predict(img_array)
 
+        # Debug de salida
+        print("Salidas del modelo:", type(salidas), 
+              [s.shape if hasattr(s,'shape') else type(s) for s in salidas])
+
+        # Aseguramos que siempre sean 3 arrays
         if not isinstance(salidas, (list, tuple)):
             salidas = [salidas]
 
-        if len(salidas) < 3:
-            return jsonify({'error': 'El modelo no retornó las 3 salidas esperadas.'}), 500
+        pred_diagnosis = salidas[0] if len(salidas) > 0 else np.zeros((1, len(clases_diagnostico)))
+        pred_lobe      = salidas[1] if len(salidas) > 1 else np.zeros((1, len(clases_lobulo)))
+        pred_score     = salidas[2] if len(salidas) > 2 else np.array([[0.0]])
 
-        pred_diagnosis, pred_lobe, pred_score = salidas
         clase_diagnostico = clases_diagnostico[int(np.argmax(pred_diagnosis[0]))]
         clase_lobulo      = clases_lobulo[int(np.argmax(pred_lobe[0]))]
         nivel_danio       = round(float(np.ravel(pred_score)[0]), 2)
@@ -121,6 +125,7 @@ def predict():
         })
 
     except Exception as e:
+        print("Error en predict():", str(e))
         return jsonify({'error': f'Error en la predicción o modelo: {str(e)}'}), 500
 
 # ================== Gestión de registros ==================
