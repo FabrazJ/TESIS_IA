@@ -3,21 +3,21 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 from flask import Flask, request, jsonify, render_template
 from PIL import Image
-import numpy as np, csv
+import numpy as np
+import csv
 from datetime import datetime
 from tensorflow import keras
 
 # ================== Config ==================
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR  = os.path.join(BASE_DIR, "Model")
-MODEL_NAME = "modelo_multitarea_final (1).keras"
+MODEL_NAME = "modelo_multitarea_final.keras"  # Renombrar el archivo para evitar paréntesis
 MODEL_PATH = os.path.join(MODEL_DIR, MODEL_NAME)
-
-FILE_ID = os.getenv("DRIVE_FILE_ID", "1i8P8mkABFERZ-hBgz1Scpx_MjNxbAAwQ")
-CSV_PATH = os.path.join(BASE_DIR, "registros_pacientes.csv")
+CSV_PATH   = os.path.join(BASE_DIR, "registros_pacientes.csv")
+FILE_ID    = os.getenv("DRIVE_FILE_ID", "1i8P8mkABFERZ-hBgz1Scpx_MjNxbAAwQ")
 
 clases_diagnostico = ['No Alzheimer', 'Alzheimer leve', 'Alzheimer moderado', 'Alzheimer severo']
-clases_lobulo = ['Frontal', 'Temporal', 'Parietal', 'Occipital']
+clases_lobulo      = ['Frontal', 'Temporal', 'Parietal', 'Occipital']
 
 # ================== Helpers ==================
 def ensure_model():
@@ -41,12 +41,14 @@ def get_model():
     return model
 
 def preparar_imagen(archivo):
+    """Procesa la imagen para el modelo: tamaño 128x128 y normalización."""
     img = Image.open(archivo).convert('RGB')
     img = img.resize((128, 128))
     img_array = np.array(img, dtype=np.float32) / 255.0
     return np.expand_dims(img_array, axis=0)
 
 def guardar_en_csv(data):
+    """Guarda los registros de pacientes en CSV."""
     file_exists = os.path.isfile(CSV_PATH)
     with open(CSV_PATH, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -84,16 +86,17 @@ def predict():
     except:
         return jsonify({'error': 'Edad inválida'}), 400
 
+    # Procesar imagen
     try:
         img_array = preparar_imagen(archivo)
     except Exception as e:
         return jsonify({'error': f'Error al procesar la imagen: {str(e)}'}), 400
 
+    # Predicción
     try:
         model_obj = get_model()
         salidas = model_obj.predict(img_array)
 
-        # Si devuelve un solo array, lo convertimos en lista
         if not isinstance(salidas, (list, tuple)):
             salidas = [salidas]
 
@@ -105,9 +108,11 @@ def predict():
         clase_lobulo      = clases_lobulo[int(np.argmax(pred_lobe[0]))]
         nivel_danio       = round(float(np.ravel(pred_score)[0]), 2)
 
-        guardar_en_csv([datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        nombre, cedula, edad, sexo,
-                        clase_diagnostico, clase_lobulo, nivel_danio])
+        guardar_en_csv([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            nombre, cedula, edad, sexo,
+            clase_diagnostico, clase_lobulo, nivel_danio
+        ])
 
         return jsonify({
             'diagnostico': clase_diagnostico,
@@ -118,6 +123,7 @@ def predict():
     except Exception as e:
         return jsonify({'error': f'Error en la predicción o modelo: {str(e)}'}), 500
 
+# ================== Gestión de registros ==================
 @app.route('/registros', methods=['GET'])
 def obtener_registros():
     if not os.path.isfile(CSV_PATH) or os.stat(CSV_PATH).st_size == 0:
@@ -181,5 +187,6 @@ def eliminar_registro():
         return jsonify({'mensaje': 'Registro eliminado'})
     return jsonify({'error': 'Cédula no encontrada'}), 404
 
+# ================== Run App ==================
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
