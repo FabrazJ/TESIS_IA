@@ -21,18 +21,15 @@ clases_lobulo      = ['Frontal', 'Temporal', 'Parietal', 'Occipital']
 
 # ================== Helpers ==================
 def ensure_model():
-    """Descarga el modelo desde Google Drive si no existe localmente."""
-    if os.path.exists(MODEL_PATH):
-        return
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    import gdown
-    url = f"https://drive.google.com/uc?id={FILE_ID}"
-    print("⏬ Descargando modelo desde Google Drive...")
-    gdown.download(url, MODEL_PATH, quiet=False)
+    """Verifica que el modelo exista localmente. No descarga nada."""
     if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError("No se pudo descargar el modelo desde Google Drive.")
+        raise FileNotFoundError(
+            f"Modelo no encontrado en {MODEL_PATH}. "
+            "Debes subirlo al repositorio o al contenedor."
+        )
 
 model = None
+
 def get_model():
     global model
     if model is None:
