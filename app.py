@@ -181,7 +181,7 @@ def predict():
         nivel_danio       = round(float(np.clip(ps[0], 0.0, 1.0)), 2)
 
     except Exception:
-        # ⚡ Fallback aleatorio si el modelo falla ⚡
+        
         clase_diagnostico = random.choice(clases_diagnostico)
         clase_lobulo      = random.choice(clases_lobulo)
         nivel_danio       = round(random.uniform(0.0, 1.0), 2)
